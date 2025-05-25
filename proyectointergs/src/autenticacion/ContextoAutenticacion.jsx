@@ -2,6 +2,7 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
   signInWithRedirect,
+  getAdditionalUserInfo,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
@@ -15,26 +16,27 @@ import {
 import { createContext, useContext, useEffect, useState } from "react";
 import { auth, db } from "../api/firebase";
 
+/* ─── configuración ─────────────────────────────────────────── */
 const Ctx = createContext();
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: "select_account" });
 
-// ⚠️ pon aquí el correo de TU cuenta administrador principal
-const CORREO_ADMIN = "arisolri1@gmail.com";
+const CORREO_ADMIN = "asolanor1@gmail.com";
 
+/* ─── componente proveedor ──────────────────────────────────── */
 export function ProveedorAutenticacion({ children }) {
   const [usuario, setUsuario]  = useState(null);
   const [rol, setRol]          = useState(null);
   const [cargando, setLoad]    = useState(true);
 
-  /* ───────── helper para crear/actualizar doc usuario ───────── */
-  const upsertDocUsuario = async (cred, rolCalculado) => {
+  /* crea o actualiza documento usuario en /usuarios/{uid} */
+  const upsertDocUsuario = async (cred, rolCalc) => {
     const ref  = doc(db, "usuarios", cred.uid);
     const snap = await getDoc(ref);
 
     if (!snap.exists()) {
       await setDoc(ref, {
-        role:        rolCalculado,
+        role:        rolCalc,
         displayName: cred.displayName || "",
         email:       cred.email,
         createdAt:   new Date(),
@@ -42,23 +44,14 @@ export function ProveedorAutenticacion({ children }) {
     }
   };
 
-  /* ───────── listener de sesión ───────── */
+  /* listener de sesión */
   useEffect(() => {
     return onAuthStateChanged(auth, async (cred) => {
-      if (!cred) {
-        setUsuario(null);
-        setRol(null);
-        setLoad(false);
-        return;
-      }
+      if (!cred) { setUsuario(null); setRol(null); setLoad(false); return; }
 
-      // rol por defecto: admin si coincide correo fijo, sino paciente
       let rolCalc = cred.email === CORREO_ADMIN ? "admin" : "paciente";
-
-      // si existe doc → usa role almacenado (permite más admins)
       const snap = await getDoc(doc(db, "usuarios", cred.uid));
       if (snap.exists()) rolCalc = snap.data().role;
-
       await upsertDocUsuario(cred, rolCalc);
 
       setUsuario(cred);
@@ -67,21 +60,42 @@ export function ProveedorAutenticacion({ children }) {
     });
   }, []);
 
-  /* ───────── métodos públicos ───────── */
-  const loginGoogle   = () => signInWithPopup(auth, googleProvider)
-                                .catch(() => signInWithRedirect(auth, googleProvider));
+  /* ─── métodos públicos ────────────────────────────────────── */
+  const loginGoogle = async (intentoRegistro = false) => {
+    try {
+      const cred = await signInWithPopup(auth, googleProvider);
+      const info = getAdditionalUserInfo(cred);
 
-  const loginCorreo   = (email, pass) => signInWithEmailAndPassword(auth, email, pass);
+      if (intentoRegistro && !info.isNewUser) {
+        await signOut(auth);   // aborta redirección
+        throw new Error("Ese correo de Google ya está registrado. Inicia sesión.");
+      }
+      return cred;
+    } catch (err) {
+      if (err.code === "auth/popup-blocked") {
+        const cred = await signInWithRedirect(auth, googleProvider);
+        const info = getAdditionalUserInfo(cred);
+        if (intentoRegistro && !info.isNewUser) {
+          await signOut(auth);
+          throw new Error("Ese correo de Google ya está registrado. Inicia sesión.");
+        }
+        return cred;
+      }
+      throw err;
+    }
+  };
 
-  const registrar     = async (email, pass, nombre) => {
+  const loginCorreo = (email, pass) =>
+    signInWithEmailAndPassword(auth, email, pass);
+
+  const registrar = async (email, pass, nombre) => {
     const { user } = await createUserWithEmailAndPassword(auth, email, pass);
     if (nombre) await updateProfile(user, { displayName: nombre });
     await upsertDocUsuario(user, "paciente");
   };
 
-  const olvidarPass   = (email) => sendPasswordResetEmail(auth, email);
-
-  const logout        = () => signOut(auth);
+  const olvidarPass = (email) => sendPasswordResetEmail(auth, email);
+  const logout      = () => signOut(auth);
 
   return (
     <Ctx.Provider value={{
