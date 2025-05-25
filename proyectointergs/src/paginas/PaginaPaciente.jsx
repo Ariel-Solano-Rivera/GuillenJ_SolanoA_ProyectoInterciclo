@@ -1,34 +1,46 @@
 import { useAuth } from "../autenticacion/ContextoAutenticacion";
+import { doc, updateDoc } from "firebase/firestore";
+import { db } from "../api/firebase";
+import { useState } from "react";
+import CitaForm from "../componentes/CitaForm";
+import CitasPaciente from "../componentes/CitasPaciente";
 
 export default function PaginaPaciente() {
   const { usuario, logout } = useAuth();
+  const [phone, setPhone] = useState(usuario.phone || "");
+
+  const guardarPerfil = async (e)=>{
+    e.preventDefault();
+    await updateDoc(doc(db,"usuarios",usuario.uid),{ phone });
+    alert("Perfil actualizado");
+  };
 
   return (
     <div className="min-h-screen flex flex-col">
-      {/* Barra superior */}
-      <header className="bg-gray-800 text-white px-6 py-3 flex justify-between items-center">
-        <span className="font-semibold">Portal Paciente</span>
-
-        <div className="flex items-center gap-4">
-          <span className="hidden sm:block text-sm">{usuario.email}</span>
-
-          <button
-            onClick={logout}
-            className="bg-red-600 hover:bg-red-700 px-3 py-1 rounded text-sm"
-          >
-            Cerrar sesión
-          </button>
-        </div>
+      <header className="bg-gray-800 text-white px-6 py-3 flex justify-between">
+        <span>Portal Paciente</span>
+        <button onClick={logout} className="btn-xs bg-red-600">Cerrar sesión</button>
       </header>
 
-      {/* Contenido principal */}
-      <main className="p-8">
-        <h2 className="text-2xl font-bold mb-4">
-          Bienvenido&nbsp;Paciente
-          {usuario.displayName && `, ${usuario.displayName}`}
-        </h2>
+      <main className="p-6 space-y-8">
+        <section className="space-y-4">
+          <h2 className="text-xl font-semibold">Mi perfil</h2>
+          <form onSubmit={guardarPerfil} className="space-y-2">
+            <input value={phone} onChange={(e)=>setPhone(e.target.value)}
+                   placeholder="Teléfono" className="input" />
+            <button className="btn">Guardar</button>
+          </form>
+        </section>
 
-        {/* Aquí irá el formulario para solicitar citas, etc. */}
+        <section className="space-y-4">
+          <h2 className="text-xl font-semibold">Solicitar cita</h2>
+          <CitaForm />
+        </section>
+
+        <section className="space-y-4">
+          <h2 className="text-xl font-semibold">Mis citas</h2>
+          <CitasPaciente />
+        </section>
       </main>
     </div>
   );
