@@ -17,6 +17,7 @@ import { auth, db } from "../api/firebase";
 
 const Ctx = createContext();
 const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: "select_account" });
 
 // ⚠️ pon aquí el correo de TU cuenta administrador principal
 const CORREO_ADMIN = "arisolri1@gmail.com";
