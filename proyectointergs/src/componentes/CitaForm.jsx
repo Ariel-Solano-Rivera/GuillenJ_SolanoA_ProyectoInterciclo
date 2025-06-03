@@ -1,8 +1,9 @@
-import { useState } from "react";
+// src/componentes/CitaForm.jsx
+import React, { useState } from "react";
+import { useAuth } from "../autenticacion/ContextoAutenticacion";
 import useMedicos from "../data/useMedicos";
 import useHorarios from "../data/useHorarios";
 import { crearCita } from "../data/useCitas";
-import { useAuth } from "../autenticacion/ContextoAutenticacion";
 
 export default function CitaForm() {
   const { usuario } = useAuth();
@@ -15,39 +16,97 @@ export default function CitaForm() {
   const { horarios } = useHorarios(medicoId);
 
   const dayIdx = fecha ? new Date(fecha).getDay() : null;
-  const slotsDisponibles =
-    horarios
-      .filter((h) => h.dias.includes(dayIdx))
-      .flatMap((h) => h.slots) || [];
+
+  const slotsDisponibles = Array.isArray(horarios)
+    ? horarios
+        .filter((h) => h.dias.includes(dayIdx))
+        .flatMap((h) => h.slots)
+    : [];
 
   const reservar = async (e) => {
     e.preventDefault();
-    await crearCita({ pacienteUid: usuario.uid, medicoId, fechaISO: fecha, hora });
-    setMedicoId(""); setFecha(""); setHora("");
-    alert("Cita solicitada. Espera confirmación.");
+    if (!medicoId || !fecha || !hora) {
+      alert("Completa todos los campos");
+      return;
+    }
+    try {
+      await crearCita({
+        pacienteUid: usuario.uid,
+        medicoId,
+        fechaISO: fecha,
+        hora,
+      });
+      setMedicoId("");
+      setFecha("");
+      setHora("");
+      alert("Cita solicitada. Espera confirmación.");
+    } catch (err) {
+      console.error("Error creando cita:", err);
+      alert("No se pudo solicitar la cita");
+    }
   };
 
   return (
-    <form onSubmit={reservar} className="space-y-3">
-      <select value={medicoId} onChange={(e)=>setMedicoId(e.target.value)} className="input" required>
-        <option value="">-- Selecciona médico --</option>
-        {medicos.map(m=>(
-          <option key={m.id} value={m.id}>
-            {m.nombre} · {m.especialidad}
-          </option>
-        ))}
-      </select>
+    <form onSubmit={reservar}>
+      <div className="form-group">
+        <label>Médico</label>
+        <select
+          value={medicoId}
+          onChange={(e) => setMedicoId(e.target.value)}
+          required
+        >
+          <option value="">-- Selecciona médico --</option>
+          {medicos.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.nombre} · {m.especialidad}
+            </option>
+          ))}
+        </select>
+      </div>
 
-      <input type="date" className="input"
-             value={fecha} onChange={(e)=>setFecha(e.target.value)} required />
+      <div className="form-group">
+        <label>Fecha</label>
+        <input
+          type="date"
+          value={fecha}
+          onChange={(e) => setFecha(e.target.value)}
+          required
+        />
+      </div>
 
-      <select value={hora} onChange={(e)=>setHora(e.target.value)}
-              className="input" required>
-        <option value="">-- Hora --</option>
-        {slotsDisponibles.map(s=><option key={s}>{s}</option>)}
-      </select>
+      <div className="form-group">
+        <label>Hora</label>
+        <select
+          value={hora}
+          onChange={(e) => setHora(e.target.value)}
+          required
+        >
+          <option value="">-- Selecciona hora --</option>
+          {slotsDisponibles.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+      </div>
 
-      <button className="btn">Reservar cita</button>
+      <div style={{ display: "flex", gap: "1rem" }}>
+        <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>
+          Guardar
+        </button>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          style={{ flex: 1 }}
+          onClick={() => {
+            setMedicoId("");
+            setFecha("");
+            setHora("");
+          }}
+        >
+          Cancelar
+        </button>
+      </div>
     </form>
   );
 }

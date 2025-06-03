@@ -1,13 +1,14 @@
+/* src/index.jsx */
 import React from "react";
 import ReactDOM from "react-dom/client";
-import EnrutadorApp from "./router/EnrutadorApp";
+import App from "./router/EnrutadorApp";
 import { ProveedorAutenticacion } from "./autenticacion/ContextoAutenticacion";
-import "./index.css";
+import "./styles.css"; // <-- aquí importas tu CSS tradicional
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <ProveedorAutenticacion>
-      <EnrutadorApp />
+      <App />
     </ProveedorAutenticacion>
   </React.StrictMode>
 );

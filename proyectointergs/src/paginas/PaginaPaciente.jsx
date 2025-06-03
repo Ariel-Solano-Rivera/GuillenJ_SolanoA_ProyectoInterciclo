@@ -1,47 +1,62 @@
-import { useAuth } from "../autenticacion/ContextoAutenticacion";
-import { doc, updateDoc } from "firebase/firestore";
-import { db } from "../api/firebase";
-import { useState } from "react";
-import CitaForm from "../componentes/CitaForm";
-import CitasPaciente from "../componentes/CitasPaciente";
+// src/paginas/PaginaPaciente.jsx
+import React from "react";
+import { useNavigate } from "react-router-dom";
 
 export default function PaginaPaciente() {
-  const { usuario, logout } = useAuth();
-  const [phone, setPhone] = useState(usuario.phone || "");
-
-  const guardarPerfil = async (e)=>{
-    e.preventDefault();
-    await updateDoc(doc(db,"usuarios",usuario.uid),{ phone });
-    alert("Perfil actualizado");
-  };
+  const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <header className="bg-gray-800 text-white px-6 py-3 flex justify-between">
-        <span>Portal Paciente</span>
-        <button onClick={logout} className="btn-xs bg-red-600">Cerrar sesión</button>
-      </header>
-
-      <main className="p-6 space-y-8">
-        <section className="space-y-4">
-          <h2 className="text-xl font-semibold">Mi perfil</h2>
-          <form onSubmit={guardarPerfil} className="space-y-2">
-            <input value={phone} onChange={(e)=>setPhone(e.target.value)}
-                   placeholder="Teléfono" className="input" />
-            <button className="btn">Guardar</button>
-          </form>
-        </section>
-
-        <section className="space-y-4">
-          <h2 className="text-xl font-semibold">Solicitar cita</h2>
-          <CitaForm />
-        </section>
-
-        <section className="space-y-4">
-          <h2 className="text-xl font-semibold">Mis citas</h2>
-          <CitasPaciente />
-        </section>
-      </main>
+    <div>
+      <h2 className="section-title">Portal Paciente</h2>
+      <p style={{ color: "var(--color-gris-600)", marginBottom: "0.75rem" }}>
+        Bienvenido. Usa el menú lateral para:
+      </p>
+      <ul style={{ paddingLeft: "1.25rem", color: "var(--color-gris-600)" }}>
+        <li>
+          <button
+            onClick={() => navigate("/paciente/solicitar")}
+            style={{
+              background: "none",
+              border: "none",
+              color: "var(--color-azul-principal)",
+              cursor: "pointer",
+              fontSize: "1rem",
+              marginBottom: "0.5rem",
+            }}
+          >
+            • Solicitar nueva cita
+          </button>
+        </li>
+        <li>
+          <button
+            onClick={() => navigate("/paciente/mis-citas")}
+            style={{
+              background: "none",
+              border: "none",
+              color: "var(--color-azul-principal)",
+              cursor: "pointer",
+              fontSize: "1rem",
+              marginBottom: "0.5rem",
+            }}
+          >
+            • Ver mis citas
+          </button>
+        </li>
+        <li>
+          <button
+            onClick={() => navigate("/paciente/perfil")}
+            style={{
+              background: "none",
+              border: "none",
+              color: "var(--color-azul-principal)",
+              cursor: "pointer",
+              fontSize: "1rem",
+            }}
+          >
+            • Ver/Editar mi perfil
+          </button>
+        </li>
+      </ul>
     </div>
   );
 }
