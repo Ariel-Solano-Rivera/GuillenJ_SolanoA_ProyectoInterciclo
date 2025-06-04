@@ -91,10 +91,10 @@ export function useCitasAdmin() {
 }
 
 /**
- * Crea una nueva cita. No permite duplicados exactos (mismo médico, misma fecha, misma hora).
+ * Crea una nueva cita. Evita duplicados confirmados exactos (mismo médico, misma fecha, misma hora).
  */
 export async function crearCita({ pacienteUid, medicoId, especialidad, fechaISO, hora }) {
-  // Primero verifico que no exista ya una cita confirmada exactamente igual
+  // 1) Verificar si ya existe una cita confirmada exactamente igual
   const qCheck = query(
     collection(db, "citas"),
     where("medicoId", "==", medicoId),
@@ -107,10 +107,21 @@ export async function crearCita({ pacienteUid, medicoId, especialidad, fechaISO,
     throw new Error("Ya existe una cita confirmada en esa fecha y hora para este médico.");
   }
 
-  // Si no hay duplicado, convertimos a Timestamp y guardamos
-  const slot = Timestamp.fromDate(new Date(`${fechaISO}T${hora}:00`));
-  const dia = new Date(fechaISO).toLocaleDateString("es-ES", { weekday: "short" });
+  // 2) Parsear fechaISO y hora para evitar problemas de zona horaria
+  //    fechaISO: "YYYY-MM-DD", hora: "HH:MM" (24h)
+  //    desglosamos:
+  const [yyyy, mm, dd] = fechaISO.split("-").map(Number);
+  const [hh, min] = hora.split(":").map(Number);
 
+  // 3) Crear un objeto Date local sin corrimientos
+  const fechaObj = new Date(yyyy, mm - 1, dd);
+  const dia = fechaObj.toLocaleDateString("es-ES", { weekday: "short" }); // ej. "lun", "mar", ...
+
+  // 4) Crear un objeto Date con la hora exacta para slot
+  const fechaConHora = new Date(yyyy, mm - 1, dd, hh, min);
+  const slot = Timestamp.fromDate(fechaConHora);
+
+  // 5) Insertar en Firestore
   const docRef = await addDoc(collection(db, "citas"), {
     pacienteUid,
     medicoId,
@@ -125,16 +136,53 @@ export async function crearCita({ pacienteUid, medicoId, especialidad, fechaISO,
 }
 
 /**
- * Elimina una cita. Si ya está confirmada, lanza error.
+ * Actualiza una cita existente (por ejemplo, cambiar médico, fecha o hora).
+ * Recalcula `dia` y `slot` según los nuevos datos.
+ * Recibe:
+ *   id: string (ID del documento)
+ *   datos: objeto con campos a actualizar:
+ *     { medicoId, especialidad, fechaISO, hora } (al menos uno)
+ */
+export async function actualizarCita(id, datos) {
+  // 1) Leer los datos actuales para combinar
+  const ref = doc(db, "citas", id);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) throw new Error("La cita no existe.");
+
+  const dataActual = snap.data();
+  // Extraer la nueva fechaISO y hora, o mantener la anterior
+  const newFechaISO = datos.fechaISO || dataActual.fechaISO;
+  const newHora = datos.hora || dataActual.hora;
+  const newMedicoId = datos.medicoId || dataActual.medicoId;
+  const newEspecialidad = datos.especialidad || dataActual.especialidad;
+
+  // 2) Recalcular día y slot localmente:
+  const [yyyy, mm, dd] = newFechaISO.split("-").map(Number);
+  const [hh, min] = newHora.split(":").map(Number);
+  const fechaObj = new Date(yyyy, mm - 1, dd);
+  const dia = fechaObj.toLocaleDateString("es-ES", { weekday: "short" });
+  const fechaConHora = new Date(yyyy, mm - 1, dd, hh, min);
+  const slot = Timestamp.fromDate(fechaConHora);
+
+  // 3) Actualizar el documento con los nuevos campos
+  await updateDoc(ref, {
+    medicoId: newMedicoId,
+    especialidad: newEspecialidad,
+    fechaISO: newFechaISO,
+    hora: newHora,
+    dia,
+    slot,
+    // Nota: no cambiamos `estado` aquí (permanece en "pendiente" o "confirmada")
+  });
+}
+
+/**
+ * Elimina una cita sin importar su estado.
  */
 export async function eliminarCita(id) {
   const ref = doc(db, "citas", id);
   const snap = await getDoc(ref);
   if (!snap.exists()) throw new Error("La cita no existe.");
-  const data = snap.data();
-  if (data.estado === "confirmada") {
-    throw new Error("No puedes eliminar una cita que ya está confirmada.");
-  }
-  // Si está pendiente, la borramos
+  // Ya no bloqueamos la eliminación si está confirmada.
   await deleteDoc(ref);
 }
