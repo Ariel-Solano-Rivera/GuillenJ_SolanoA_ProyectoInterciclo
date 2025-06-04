@@ -1,33 +1,36 @@
 // src/componentes/CitasPaciente.jsx
-import { useCitasPaciente } from '../data/useCitas';
-import useMedicos from '../data/useMedicos';
 
+import React from "react";
+import { useMisCitas } from "../data/useCitas";
+
+/**
+ * Componente que lista en tiempo real las citas del paciente autenticado.
+ */
 export default function CitasPaciente() {
-  const { medicos } = useMedicos();
-  const citas = useCitasPaciente(); // devuelve las citas del paciente actual, usa el uid internamente
-
-  const medicoPorId = (id) => medicos.find((m) => m.id === id)?.nombre || '…';
+  const citas = useMisCitas();
 
   return (
-    <ul className="space-y-2">
-      {citas.map((c) => (
-        <li key={c.id} className="border p-3 rounded">
-          <p>
-            <b>Médico:</b> {medicoPorId(c.medicoId)}
-          </p>
-          <p>
-            <b>Fecha:</b> {c.slot.toDate().toLocaleString()}
-          </p>
-          <p>
-            <b>Estado:</b>{' '}
-            <span
-              className={c.estado === 'confirmada' ? 'text-green-600' : 'text-yellow-600'}
-            >
-              {c.estado}
-            </span>
-          </p>
-        </li>
-      ))}
-    </ul>
+    <div>
+      <h3>Mis Citas</h3>
+      {citas.length === 0 ? (
+        <p>No tienes citas pendientes.</p>
+      ) : (
+        <ul>
+          {citas.map((c) => (
+            <li key={c.id} style={{ marginBottom: "8px" }}>
+              <strong>Fecha:</strong> {c.dia}, {c.slot.toDate().toLocaleDateString("es-ES")}
+              <br />
+              <strong>Hora:</strong> {c.hora}
+              <br />
+              <strong>Médico:</strong> {c.medicoId}
+              <br />
+              <strong>Especialidad:</strong> {c.especialidad}
+              <br />
+              <strong>Estado:</strong> {c.estado}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

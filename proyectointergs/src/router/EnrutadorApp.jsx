@@ -1,4 +1,5 @@
 // src/router/EnrutadorApp.jsx
+
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "../autenticacion/ContextoAutenticacion";
@@ -17,6 +18,7 @@ import PaginaSolicitarCita from "../paginas/PaginaSolicitarCita";
 import PaginaCitasPaciente from "../paginas/PaginaCitasPaciente";
 import PaginaPerfilPaciente from "../paginas/PaginaPerfilPaciente";
 
+// Redirige según rol
 function RedirSegunRol() {
   const { rol, cargando } = useAuth();
   if (cargando) return null;
@@ -29,9 +31,10 @@ export default function EnrutadorApp() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* PÁGINA DE LOGIN */}
         <Route path="/login" element={<PaginaLogin />} />
 
-        {/* ADMIN */}
+        {/* RUTAS ADMIN */}
         <Route
           path="/admin/*"
           element={
@@ -47,7 +50,7 @@ export default function EnrutadorApp() {
           <Route path="*" element={<Navigate to="/admin" />} />
         </Route>
 
-        {/* PACIENTE */}
+        {/* RUTAS PACIENTE */}
         <Route
           path="/paciente/*"
           element={
@@ -57,13 +60,13 @@ export default function EnrutadorApp() {
           }
         >
           <Route index element={<PaginaPaciente />} />
-          <Route path="solicitar" element={<PaginaSolicitarCita />} />
+          <Route path="solicitar-cita" element={<PaginaSolicitarCita />} />
           <Route path="mis-citas" element={<PaginaCitasPaciente />} />
           <Route path="perfil" element={<PaginaPerfilPaciente />} />
           <Route path="*" element={<Navigate to="/paciente" />} />
         </Route>
 
-        {/* RAÍZ */}
+        {/* RAÍZ: redirige según sesión/rol */}
         <Route path="/" element={<RedirSegunRol />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

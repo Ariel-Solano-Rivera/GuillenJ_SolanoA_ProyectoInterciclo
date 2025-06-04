@@ -1,4 +1,5 @@
 // src/componentes/Layout.jsx
+
 import React from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../autenticacion/ContextoAutenticacion";
@@ -12,6 +13,7 @@ export default function Layout({ tipo }) {
     navigate("/login", { replace: true });
   };
 
+  // Menú distinto según rol
   const menuAdmin = [
     { to: "/admin", label: "Inicio" },
     { to: "/admin/medicos", label: "Médicos" },
@@ -21,7 +23,8 @@ export default function Layout({ tipo }) {
 
   const menuPaciente = [
     { to: "/paciente", label: "Inicio" },
-    { to: "/paciente/solicitar", label: "Solicitar Cita" },
+    // ← Muy importante: debe coincidir EXACTO con la ruta en el router
+    { to: "/paciente/solicitar-cita", label: "Solicitar Cita" },
     { to: "/paciente/mis-citas", label: "Mis Citas" },
     { to: "/paciente/perfil", label: "Mi Perfil" },
   ];
@@ -52,7 +55,9 @@ export default function Layout({ tipo }) {
       {/* ====== Contenido principal ====== */}
       <div className="main-wrapper">
         <header className="header">
-          <h1>{usuario ? `Bienvenido, ${usuario.displayName}` : "Consultorio"}</h1>
+          <h1>
+            {usuario ? `Bienvenido, ${usuario.displayName}` : "Consultorio"}
+          </h1>
           <button className="btn btn-danger btn-logout" onClick={handleLogout}>
             Salir
           </button>

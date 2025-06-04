@@ -1,10 +1,12 @@
 // src/paginas/PaginaCitasAdmin.jsx
+
 import React, { useState, useMemo } from "react";
-import { useCitasAdmin } from "../data/useCitas";
+import { useCitasAdmin, eliminarCita } from "../data/useCitas";
 import useMedicos from "../data/useMedicos";
 import useUsuarios from "../data/useUsuarios";
 
 export default function PaginaCitasAdmin() {
+  // useCitasAdmin devuelve { citas, confirmar } 
   const { citas, confirmar } = useCitasAdmin();
   const { medicos } = useMedicos();
   const usuarios = useUsuarios();
@@ -61,7 +63,7 @@ export default function PaginaCitasAdmin() {
         </div>
       </div>
 
-      {/* Listado de citas en “cards” */}
+      {/* LISTADO DE CITAS */}
       {filteredCitas.length > 0 ? (
         filteredCitas.map((c) => (
           <div key={c.id} className="item-card">
@@ -94,17 +96,31 @@ export default function PaginaCitasAdmin() {
                 </span>
               </p>
             </div>
-            {c.estado === "pendiente" && (
-              <div className="item-actions">
-                <button
-                  className="btn btn-success"
-                  onClick={() => confirmar(c.id)}
-                  style={{ fontSize: "0.85rem", padding: "0.4rem 0.8rem" }}
-                >
-                  Confirmar
-                </button>
-              </div>
-            )}
+            <div className="item-actions">
+              {c.estado === "pendiente" && (
+                <>
+                  <button
+                    className="btn btn-success"
+                    onClick={() => confirmar(c.id)}
+                    style={{ marginRight: "0.5rem", fontSize: "0.85rem" }}
+                  >
+                    Confirmar
+                  </button>
+                  <button
+                    className="btn btn-danger"
+                    onClick={() => eliminarCita(c.id)}
+                    style={{ fontSize: "0.85rem" }}
+                  >
+                    Eliminar
+                  </button>
+                </>
+              )}
+              {c.estado === "confirmada" && (
+                <span className="text-gray-500" style={{ fontSize: "0.85rem" }}>
+                  (No se puede eliminar)
+                </span>
+              )}
+            </div>
           </div>
         ))
       ) : (

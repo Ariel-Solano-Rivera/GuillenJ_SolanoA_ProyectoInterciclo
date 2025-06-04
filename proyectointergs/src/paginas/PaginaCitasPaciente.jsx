@@ -1,10 +1,11 @@
 // src/paginas/PaginaCitasPaciente.jsx
+
 import React, { useState, useMemo } from "react";
-import { useCitasPaciente } from "../data/useCitas";
+import { useMisCitas } from "../data/useCitas";
 import useMedicos from "../data/useMedicos";
 
 export default function PaginaCitasPaciente() {
-  const citas = useCitasPaciente();
+  const citas = useMisCitas();
   const { medicos } = useMedicos();
 
   const [estadoFilter, setEstadoFilter] = useState("todas");
@@ -83,16 +84,7 @@ export default function PaginaCitasPaciente() {
                 </span>
               </p>
             </div>
-            {c.estado === "pendiente" && (
-              <div className="item-actions">
-                <button className="btn btn-primary" style={{ fontSize: "0.85rem", padding: "0.4rem 0.8rem" }}>
-                  Editar
-                </button>
-                <button className="btn btn-danger" style={{ fontSize: "0.85rem", padding: "0.4rem 0.8rem" }}>
-                  Eliminar
-                </button>
-              </div>
-            )}
+            {/* NO mostramos botones de editar/eliminar para el paciente */}
           </div>
         ))
       ) : (

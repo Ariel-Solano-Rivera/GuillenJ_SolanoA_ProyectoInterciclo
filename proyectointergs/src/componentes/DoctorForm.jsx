@@ -2,13 +2,19 @@
 import React, { useState } from "react";
 
 export default function DoctorForm({ onSave }) {
+  // Estado local para los campos del formulario
   const [f, setF] = useState({ nombre: "", especialidad: "", telefono: "" });
 
-  const handleChange = (e) => setF({ ...f, [e.target.name]: e.target.value });
+  // Cada vez que cambias un campo, actualizamos f
+  const handleChange = (e) => {
+    setF({ ...f, [e.target.name]: e.target.value });
+  };
 
+  // Al hacer submit llamamos a onSave
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSave(f);
+    console.log(" [DoctorForm] handleSubmit → datos enviados:", f);
+    onSave(f);                  // <–– Aquí es donde le pasamos { nombre, especialidad, telefono }
     setF({ nombre: "", especialidad: "", telefono: "" });
   };
 

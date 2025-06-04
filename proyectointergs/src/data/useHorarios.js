@@ -1,4 +1,5 @@
 // src/data/useHorarios.js
+
 import {
   collection,
   addDoc,
@@ -7,40 +8,52 @@ import {
   onSnapshot,
   query,
   where,
-} from 'firebase/firestore';
-import { useEffect, useState } from 'react';
-import { db } from '../api/firebase';
+} from "firebase/firestore";
+import { useEffect, useState } from "react";
+import { db } from "../api/firebase";
 
-/*
-  Esquema horario:
-  {
-    medicoId : "abc123",
-    dias     : [1,3,5],   // 0-Dom, 1-Lun, … 6-Sáb
-    slots    : ["09:00","09:30","10:00"]
-  }
-*/
-
-export default function useHorarios(medicoId) {
+/**
+ * Hook para leer en tiempo real los horarios de un médico.
+ * Parámetro:
+ *   - medicoId: id del médico cuyos horarios queremos escuchar.
+ *
+ * Asume que cada documento en "horarios" tiene:
+ *   { medicoId: "...", dias: [0, 2, 4], slots: ["10:00","11:00"] }
+ */
+export default function useHorarios(medicoId = null) {
   const [horarios, setHorarios] = useState([]);
 
   useEffect(() => {
     if (!medicoId) {
-      // Si no hay médico seleccionado, forzamos arreglo vacío
       setHorarios([]);
       return;
     }
-    // Si sí hay medicoId, suscribimos a Firestore
-    const q = query(collection(db, 'horarios'), where('medicoId', '==', medicoId));
-    const unsub = onSnapshot(q, (snap) =>
-      setHorarios(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+
+    const q = query(
+      collection(db, "horarios"),
+      where("medicoId", "==", medicoId)
     );
+
+    const unsub = onSnapshot(
+      q,
+      (snapshot) => {
+        const arr = snapshot.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
+        }));
+        setHorarios(arr);
+      },
+      (error) => {
+        console.error("Error al leer colección 'horarios':", error);
+      }
+    );
+
     return () => unsub();
   }, [medicoId]);
 
-  const crear = (dias, slots) =>
-    addDoc(collection(db, 'horarios'), { medicoId, dias, slots });
-
-  const eliminar = (id) => deleteDoc(doc(db, 'horarios', id));
+  // Funciones para crear y eliminar horarios
+  const crear = (data) => addDoc(collection(db, "horarios"), data);
+  const eliminar = (id) => deleteDoc(doc(db, "horarios", id));
 
   return { horarios, crear, eliminar };
 }
