@@ -6,34 +6,50 @@ import { useAuth } from "../autenticacion/ContextoAutenticacion";
 import { useMisCitas } from "../data/useCitas";
 import useMedicos from "../data/useMedicos";
 
+/**
+ * PaginaPaciente:
+ *  - Muestra un resumen para el paciente autenticado:
+ *      • Estadísticas de citas pendientes y confirmadas.
+ *      • Información de la próxima cita futura.
+ *      • Botones de navegación rápida (solicitar cita, ver citas y perfil).
+ */
 export default function PaginaPaciente() {
+  // 1) Obtenemos el objeto `usuario` desde el contexto de autenticación
   const { usuario } = useAuth();
+  // 2) Navegación programática
   const navigate = useNavigate();
 
-  // 1) Traemos en tiempo real las citas del paciente
+  // 3) useMisCitas: hook que retorna en tiempo real todas las citas del paciente actual
   const citas = useMisCitas();
 
-  // 2) Traemos la lista de médicos (necesitamos para mostrar nombre en la próxima cita)
+  // 4) useMedicos: hook que carga TODA la lista de médicos en tiempo real
+  //    Lo necesitamos para mostrar el nombre del médico en la próxima cita
   const { medicos } = useMedicos();
 
-  // 3) Calculamos estadísticas y buscamos la próxima cita en el futuro
+  /**
+   * 5) Calcular estadísticas y determinar la próxima cita futura.
+   */
   const { totalPendientes, totalConfirmadas, proximaCita } = useMemo(() => {
     let pendientes = 0;
     let confirmadas = 0;
     const ahora = new Date().getTime();
     const futuras = [];
 
+    // Recorremos cada cita para contar estados y armar un arreglo de futuras fechas
     citas.forEach((c) => {
       if (c.estado === "pendiente") pendientes++;
       if (c.estado === "confirmada") confirmadas++;
-      // Comprobamos que slot exista y sea una fecha futura
+      // Si `c.slot` existe y tiene método toDate(), verificamos si es futura
       if (c.slot && typeof c.slot.toDate === "function") {
         const ts = c.slot.toDate().getTime();
-        if (ts > ahora) futuras.push({ ...c, fechaMs: ts });
+        if (ts > ahora) {
+          // Agregamos timestamp y datos de la cita para ordenar luego
+          futuras.push({ ...c, fechaMs: ts });
+        }
       }
     });
 
-    // Ordenamos por fechaMs y tomamos la primera si existe
+    // Ordenamos las citas futuras por `fechaMs` ascendente y tomamos la primera
     futuras.sort((a, b) => a.fechaMs - b.fechaMs);
     const proxima = futuras.length > 0 ? futuras[0] : null;
 
@@ -44,7 +60,10 @@ export default function PaginaPaciente() {
     };
   }, [citas]);
 
-  // Helper para obtener nombre de médico por ID
+  /**
+   * 6) Helper para convertir `medicoId` a nombre de médico.
+   *    Busca en `medicos` y si no lo encuentra, muestra un guion.
+   */
   const obtenerNombreMedico = (id) => {
     const m = medicos.find((x) => x.id === id);
     return m ? m.nombre : "—";
@@ -52,7 +71,7 @@ export default function PaginaPaciente() {
 
   return (
     <div style={{ padding: "1rem" }}>
-      {/* ====== Bienvenida ====== */}
+      {/* ====== Bienvenida y descripción ====== */}
       <div className="card" style={{ marginBottom: "1.5rem" }}>
         <h2 className="section-title">
           Bienvenido, {usuario.displayName || "Paciente"}
@@ -73,7 +92,7 @@ export default function PaginaPaciente() {
           marginBottom: "1.5rem",
         }}
       >
-        {/* 1) Citas Pendientes */}
+        {/* 5a) Total de Citas Pendientes */}
         <div className="card" style={{ textAlign: "center", padding: "1rem" }}>
           <div style={{ fontSize: "2.5rem", fontWeight: "bold", color: "#D97706" }}>
             {totalPendientes}
@@ -83,7 +102,7 @@ export default function PaginaPaciente() {
           </div>
         </div>
 
-        {/* 2) Citas Confirmadas */}
+        {/* 5b) Total de Citas Confirmadas */}
         <div className="card" style={{ textAlign: "center", padding: "1rem" }}>
           <div style={{ fontSize: "2.5rem", fontWeight: "bold", color: "#047857" }}>
             {totalConfirmadas}
@@ -93,7 +112,7 @@ export default function PaginaPaciente() {
           </div>
         </div>
 
-        {/* 3) Próxima Cita */}
+        {/* 5c) Información de la Próxima Cita Futura */}
         <div className="card" style={{ textAlign: "center", padding: "1rem" }}>
           <div style={{ fontSize: "1.25rem", fontWeight: "600", color: "#1D4ED8" }}>
             Próxima Cita
@@ -139,8 +158,9 @@ export default function PaginaPaciente() {
             marginTop: "0.75rem",
           }}
         >
+          {/* 6a) Botón para redirigir a la página de solicitar nueva cita */}
           <button
-            onClick={() => navigate("/paciente/solicitar")}
+            onClick={() => navigate("/paciente/solicitar-cita")}
             style={{
               backgroundColor: "#1D4ED8",
               color: "white",
@@ -152,6 +172,8 @@ export default function PaginaPaciente() {
           >
             Solicitar nueva cita
           </button>
+
+          {/* 6b) Botón para redirigir a la página de ver mis citas */}
           <button
             onClick={() => navigate("/paciente/mis-citas")}
             style={{
@@ -165,6 +187,8 @@ export default function PaginaPaciente() {
           >
             Ver mis citas
           </button>
+
+          {/* 6c) Botón para redirigir a la página de perfil del paciente */}
           <button
             onClick={() => navigate("/paciente/perfil")}
             style={{

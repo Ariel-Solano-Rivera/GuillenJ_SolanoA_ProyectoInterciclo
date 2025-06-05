@@ -18,21 +18,29 @@ import DoctorForm from "../componentes/DoctorForm";
 import HorarioForm from "../componentes/HorarioForm";
 
 /**
- * Página de Médicos (Admin):
- * - Filtro por especialidad
- * - Búsqueda por nombre
- * - Listado con acciones: Editar (nombre y teléfono) y Eliminar
- * - También se mantiene la sección de asignar horarios
+ * PaginaMedicos (Admin):
+ *  - Permite al administrador:
+ *      1) Agregar un nuevo médico y, al guardarlo, crear la especialidad si no existe.
+ *      2) Filtrar la lista de médicos por especialidad y buscar por nombre.
+ *      3) Editar inline el nombre y teléfono de un médico, o eliminarlo.
+ *      4) Asignar horarios a un médico seleccionado y mostrar/eliminar esos horarios.
  */
 export default function PaginaMedicos() {
-  // 1) Listado de especialidades para el filtro
-  const especialidades = useEspecialidades(); // [{ id, name }, ...]
+  // 1) Obtenemos la lista de especialidades en tiempo real
+  //    Cada elemento es { id, name }
+  const especialidades = useEspecialidades();
 
-  // 2) Estados para filtros
+  // 2) Estados para filtros del listado de médicos
+  //    • especialidadSel: nombre de especialidad seleccionado (string vacío = todas)
+  //    • searchTerm: texto para buscar en nombre de médico
   const [especialidadSel, setEspecialidadSel] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
 
-  // 3) Hook para traer médicos filtrados por especialidadSel (si es "" trae todos)
+  // 3) useMedicos:
+  //    • medicos: arreglo de médicos filtrados según `especialidadSel`
+  //    • crearMedico: función para añadir un médico nuevo
+  //    • editarMedico: función para modificar campos en un médico
+  //    • eliminarMedico: función para borrar un médico
   const {
     medicos,
     crear: crearMedico,
@@ -40,7 +48,11 @@ export default function PaginaMedicos() {
     eliminar: eliminarMedico,
   } = useMedicos(especialidadSel || null);
 
-  // 4) Hook para traer horarios del médico seleccionado
+  // 4) Estados y variable para manejar los horarios del médico seleccionado
+  //    • medicoSel: ID del médico actualmente elegido
+  //    • horarios: arreglo de horarios que corresponden a `medicoSel`
+  //    • crearHorario: función para añadir un nuevo horario
+  //    • eliminarHorario: función para borrar un horario existente
   const [medicoSel, setMedicoSel] = useState("");
   const {
     horarios,
@@ -48,13 +60,17 @@ export default function PaginaMedicos() {
     eliminar: eliminarHorario,
   } = useHorarios(medicoSel);
 
-  // 5) Estados para edición inline de médico
+  // 5) Estados para edición inline de un médico
+  //    • editingId: ID del médico en modo edición (null = ninguno editando)
+  //    • editarNombre, editarTelefono: campos temporales para modificar
+  //    • editError: mensaje de error si la validación falla
   const [editingId, setEditingId] = useState(null);
   const [editarNombre, setEditarNombre] = useState("");
   const [editarTelefono, setEditarTelefono] = useState("");
   const [editError, setEditError] = useState("");
 
-  // 6) (Opcional) Resetear campos de edición si cambia la lista de médicos
+  // 6) useEffect para limpiar el modo edición si el médico ya no existe
+  //    (por ejemplo, si eliminamos ese médico en otra parte del componente)
   useEffect(() => {
     if (!medicos.find((m) => m.id === editingId)) {
       setEditingId(null);
@@ -64,13 +80,18 @@ export default function PaginaMedicos() {
     }
   }, [medicos, editingId]);
 
-  // 7) Manejar guardar cambios en un médico
+  /**
+   * handleGuardarEdicion:
+   *  - Valida que el nombre no quede vacío.
+   *  - Llama a editarMedico() para actualizar nombre y teléfono en Firestore.
+   *  - Si tiene éxito, sale del modo edición y limpia los campos temporales.
+   *  - Si falla, establece un mensaje en editError.
+   */
   const handleGuardarEdicion = async (id) => {
     if (!editarNombre.trim()) {
       setEditError("El nombre no puede quedar vacío.");
       return;
     }
-    // Solo permitimos cambiar nombre y teléfono
     try {
       await editarMedico(id, {
         nombre: editarNombre.trim(),
@@ -86,27 +107,36 @@ export default function PaginaMedicos() {
     }
   };
 
-  // 8) Filtrado por término de búsqueda (nombre) + especialidad
+  // 8) Filtrado de la lista de médicos:
+  //    - Primero se filtra por nombre (searchTerm).
+  //    - El hook useMedicos ya filtró por especialidadSel si se pasó.
   const medicosFiltrados = medicos.filter((m) => {
     const nombreLower = m.nombre.toLowerCase();
     const termLower = searchTerm.trim().toLowerCase();
     return nombreLower.includes(termLower);
   });
 
-  // 9) Función que antes validaba/creaba especialidad en Firestore
+  /**
+   * salvarMedico:
+   *  - Se invoca al enviar el formulario de DoctorForm.
+   *  - Recibe `data` con { nombre, especialidad, telefono }.
+   *  - Verifica si la `especialidad` ya existe en Firestore:
+   *      • Si no existe, la crea en la colección "especialidades".
+   *  - Luego llama a crearMedico() para añadir el documento en "medicos".
+   *  - Muestra alertas según éxito o error.
+   */
   const salvarMedico = async (data) => {
     const { nombre, especialidad, telefono } = data;
 
     try {
-      // Verificar si existe esa especialidad en Firestore
       const q = query(
         collection(db, "especialidades"),
         where("name", "==", especialidad)
       );
       const snap = await getDocs(q);
 
-      // Si no existe, la creamos
       if (snap.empty) {
+        // Si no se encontró la especialidad, la creamos
         await addDoc(collection(db, "especialidades"), {
           name: especialidad,
         });
@@ -117,8 +147,8 @@ export default function PaginaMedicos() {
       return;
     }
 
-    // Ahora sí, creamos el médico en la colección 'medicos'
     try {
+      // Finalmente, creamos el médico en la colección "medicos"
       await crearMedico({ nombre, especialidad, telefono });
       alert("Médico guardado correctamente.");
     } catch (err) {
@@ -127,7 +157,7 @@ export default function PaginaMedicos() {
     }
   };
 
-  // 10) Resetear médicoSel si cambia especialidadSel
+  // 10) Cuando cambia la especialidadSel, reseteamos el médico seleccionado
   useEffect(() => {
     setMedicoSel("");
   }, [especialidadSel]);
@@ -137,6 +167,7 @@ export default function PaginaMedicos() {
       {/* ====== 1) Formulario: Agregar nuevo médico ====== */}
       <div className="card" style={{ marginBottom: "1.5rem" }}>
         <h2 className="section-title">Agregar nuevo médico</h2>
+        {/* Pasamos salvarMedico como callback a DoctorForm */}
         <DoctorForm onSave={(data) => salvarMedico(data)} />
       </div>
 
@@ -144,7 +175,7 @@ export default function PaginaMedicos() {
       <div className="card" style={{ marginBottom: "1.5rem", padding: "1rem" }}>
         <h2 className="section-title">Listado de médicos</h2>
 
-        {/* Filtros */}
+        {/* ── Controles de filtrado ─────────────────────────────────────────── */}
         <div
           style={{
             display: "flex",
@@ -153,7 +184,7 @@ export default function PaginaMedicos() {
             marginBottom: "1rem",
           }}
         >
-          {/* 2a) Filtro por especialidad */}
+          {/* 2a) Seleccionar especialidad para filtrar */}
           <div>
             <label>Filtrar por especialidad:</label>
             <select
@@ -170,7 +201,7 @@ export default function PaginaMedicos() {
             </select>
           </div>
 
-          {/* 2b) Búsqueda por nombre */}
+          {/* 2b) Input para buscar por nombre */}
           <div>
             <label>Buscar por nombre:</label>
             <input
@@ -183,7 +214,7 @@ export default function PaginaMedicos() {
           </div>
         </div>
 
-        {/* Tabla de Médicos */}
+        {/* ── Tabla de Médicos ────────────────────────────────────────────────── */}
         <table className="table" style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ backgroundColor: "#f5f5f5" }}>
@@ -197,7 +228,7 @@ export default function PaginaMedicos() {
             {medicosFiltrados.map((m) => (
               <tr key={m.id} style={{ borderBottom: "1px solid #e0e0e0" }}>
                 {editingId === m.id ? (
-                  // === Modo edición inline ===
+                  // == Modo edición inline ==
                   <>
                     <td style={{ padding: "0.75rem" }}>
                       <input
@@ -243,7 +274,7 @@ export default function PaginaMedicos() {
                     </td>
                   </>
                 ) : (
-                  // === Modo lectura normal ===
+                  // == Modo lectura normal ==
                   <>
                     <td style={{ padding: "0.75rem" }}>{m.nombre}</td>
                     <td style={{ padding: "0.75rem" }}>{m.especialidad}</td>
@@ -252,7 +283,7 @@ export default function PaginaMedicos() {
                       <button
                         className="btn btn-warning"
                         onClick={() => {
-                          // Activar edición y precargar valores
+                          // Activar modo edición y precargar datos
                           setEditingId(m.id);
                           setEditarNombre(m.nombre);
                           setEditarTelefono(m.telefono || "");
@@ -296,7 +327,7 @@ export default function PaginaMedicos() {
       <div className="card" style={{ marginBottom: "1.5rem", padding: "1rem" }}>
         <h2 className="section-title">Horarios por médico</h2>
 
-        {/* 3a) Seleccionar especialidad */}
+        {/* 3a) Selector de especialidad (para filtrar médicos) */}
         <div className="form-group" style={{ marginBottom: "1rem" }}>
           <label>Selecciona especialidad</label>
           <select
@@ -313,7 +344,7 @@ export default function PaginaMedicos() {
           </select>
         </div>
 
-        {/* 3b) Seleccionar médico (filtrado) */}
+        {/* 3b) Selector de médico, solo habilitado si hay especialidadSel */}
         <div className="form-group" style={{ marginBottom: "1rem" }}>
           <label>Selecciona médico</label>
           <select
@@ -333,11 +364,17 @@ export default function PaginaMedicos() {
           </select>
         </div>
 
-        {/* 3c) Si hay médicoSel, mostramos el form de horarios y listado */}
+        {/* 3c) Si hay médicoSel, mostramos formulario y listado de horarios */}
         {medicoSel && (
           <div style={{ marginTop: "1rem" }}>
-            <HorarioForm onSave={(dias, slots) => crearHorario({ medicoId: medicoSel, dias, slots })} />
+            {/* Formulario para agregar un nuevo horario: recibe (dias, slots) */}
+            <HorarioForm
+              onSave={(dias, slots) =>
+                crearHorario({ medicoId: medicoSel, dias, slots })
+              }
+            />
 
+            {/* Listado de horarios actuales para este médico */}
             <div style={{ marginTop: "1rem" }}>
               {horarios.map((h) => (
                 <div

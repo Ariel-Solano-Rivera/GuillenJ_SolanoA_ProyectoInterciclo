@@ -1,18 +1,43 @@
 // src/paginas/PaginaCitasPaciente.jsx
 
 import React, { useState, useMemo } from "react";
-import { useMisCitas } from "../data/useCitas";
-import useMedicos from "../data/useMedicos";
+import { useMisCitas } from "../data/useCitas"; // Hook para obtener las citas del paciente actual
+import useMedicos from "../data/useMedicos";     // Hook para obtener lista de médicos
 
+/**
+ * PaginaCitasPaciente:
+ *  - Muestra las citas del paciente autenticado.
+ *  - Permite filtrar por estado y buscar por nombre de médico.
+ */
 export default function PaginaCitasPaciente() {
+  // 1) Obtenemos el array de citas del paciente en tiempo real
   const citas = useMisCitas();
+
+  // 2) Obtenemos lista de todos los médicos para convertir ID → nombre
   const { medicos } = useMedicos();
 
+  // ── Estados para filtros ───────────────────────────────────────────────
+  // Filtrar por estado: "todas", "pendiente" o "confirmada"
   const [estadoFilter, setEstadoFilter] = useState("todas");
+  // Buscar por término: compara con nombre de médico
   const [searchTerm, setSearchTerm] = useState("");
 
-  const medicoPorId = (id) => medicos.find((m) => m.id === id)?.nombre || "…";
+  /**
+   * medicoPorId:
+   *  Dado un ID de médico, busca en el arreglo `medicos` y devuelve su nombre.
+   *  Si no lo encuentra, retorna "…".
+   */
+  const medicoPorId = (id) =>
+    medicos.find((m) => m.id === id)?.nombre || "…";
 
+  /**
+   * filteredCitas:
+   *  - Se recalcula cuando cambian citas, medicos, estadoFilter o searchTerm.
+   *  - Filtra `citas` según:
+   *      • Si estadoFilter != "todas", solo incluye citas cuyo estado coincide.
+   *      • Si hay searchTerm, convierte a minúsculas y verifica que el nombre
+   *        del médico contenga ese término.
+   */
   const filteredCitas = useMemo(() => {
     return citas.filter((c) => {
       if (estadoFilter !== "todas" && c.estado !== estadoFilter) return false;
@@ -28,8 +53,9 @@ export default function PaginaCitasPaciente() {
     <div>
       <h2 className="section-title">Mis citas</h2>
 
-      {/* FILTROS */}
+      {/* ── Controles de filtrado ──────────────────────────────────────────── */}
       <div className="filter-container">
+        {/* Selector de estado */}
         <div className="filter-group">
           <label>Estado:</label>
           <select
@@ -42,6 +68,8 @@ export default function PaginaCitasPaciente() {
             <option value="confirmada">Confirmada</option>
           </select>
         </div>
+
+        {/* Input de búsqueda por nombre de médico */}
         <div className="filter-group" style={{ flex: 1 }}>
           <label>Buscar:</label>
           <input
@@ -54,10 +82,11 @@ export default function PaginaCitasPaciente() {
         </div>
       </div>
 
-      {/* LISTADO */}
+      {/* ── Listado de citas filtradas ─────────────────────────────────────── */}
       {filteredCitas.length > 0 ? (
         filteredCitas.map((c) => (
           <div key={c.id} className="item-card">
+            {/* Detalles de cada cita */}
             <div className="item-details">
               <p>
                 <strong>Médico:</strong> {medicoPorId(c.medicoId)}
@@ -84,10 +113,11 @@ export default function PaginaCitasPaciente() {
                 </span>
               </p>
             </div>
-            {/* NO mostramos botones de editar/eliminar para el paciente */}
+            {/* No mostramos botones de edición/eliminación para el paciente */}
           </div>
         ))
       ) : (
+        /* Mensaje si no hay citas que coincidan con los filtros */
         <p style={{ color: "var(--color-gris-600)" }}>
           No tienes citas que coincidan con los filtros.
         </p>

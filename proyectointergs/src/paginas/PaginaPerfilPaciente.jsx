@@ -6,26 +6,39 @@ import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { updateProfile, updateEmail } from "firebase/auth";
 import { db, auth } from "../api/firebase";
 
+/**
+ * PaginaPerfilPaciente:
+ *  - Permite al paciente ver y actualizar su nombre, email y teléfono.
+ *  - Sincroniza cambios tanto en Firebase Auth (displayName y email) como en Firestore (campo phone).
+ */
 export default function PaginaPerfilPaciente() {
+  // 1) Obtenemos el usuario autenticado desde el contexto
   const { usuario } = useAuth();
+  // loading = true mientras cargamos los datos iniciales desde Auth y Firestore
   const [loading, setLoading] = useState(true);
 
-  // Estados para el formulario
+  // 2) Estados para los campos del formulario
   const [nombre, setNombre] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
 
-  // Cargar datos iniciales: Firestore almacena el phone; 
-  // la Auth trae displayName y email
+  /**
+   * useEffect → cargarPerfil:
+   *  - Se ejecuta una vez al montar (o cuando `usuario` cambie).
+   *  - Llenamos:
+   *      • nombre y email desde usuario.displayName / usuario.email (Firebase Auth).
+   *      • phone desde el documento en Firestore /usuarios/{uid}.
+   *  - Finalmente, setLoading(false).
+   */
   useEffect(() => {
     const cargarPerfil = async () => {
       if (!usuario) return;
 
-      // Datos en Firebase Auth
+      // 2a) Extraer displayName y email directamente de Firebase Auth
       setNombre(usuario.displayName || "");
       setEmail(usuario.email || "");
 
-      // Datos en Firestore (campo phone)
+      // 2b) Leer documento en Firestore para obtener el campo 'phone'
       try {
         const ref = doc(db, "usuarios", usuario.uid);
         const snap = await getDoc(ref);
@@ -37,18 +50,27 @@ export default function PaginaPerfilPaciente() {
         console.error("Error leyendo perfil en Firestore:", err);
       }
 
+      // 2c) Ya cargamos todo, quitamos el indicador de carga
       setLoading(false);
     };
+
     cargarPerfil();
   }, [usuario]);
 
-  // Guardar cambios: nombre, email y phone
+  /**
+   * guardarPerfil:
+   *  - Se invoca al enviar el formulario.
+   *  - Actualiza:
+   *      1) Firebase Auth: displayName (si cambió) y email (si cambió).
+   *      2) Firestore: campo phone (y opcionalmente sincronizar displayName/email allí también).
+   *  - Muestra alertas según éxito o error.
+   */
   const guardarPerfil = async (e) => {
     e.preventDefault();
     if (!usuario) return;
 
     try {
-      // 1) Actualizar datos en Firebase Auth: displayName y email
+      // 3a) Actualizar en Firebase Auth
       if (usuario.displayName !== nombre) {
         await updateProfile(auth.currentUser, { displayName: nombre });
       }
@@ -56,7 +78,7 @@ export default function PaginaPerfilPaciente() {
         await updateEmail(auth.currentUser, email);
       }
 
-      // 2) Actualizar datos en Firestore: teléfono (y opcionalmente puedes sincronizar nombre/email en el doc)
+      // 3b) Actualizar en Firestore: campo phone (y sincronizar displayName/email en el documento)
       const ref = doc(db, "usuarios", usuario.uid);
       await updateDoc(ref, {
         displayName: nombre,
@@ -71,14 +93,16 @@ export default function PaginaPerfilPaciente() {
     }
   };
 
+  // Mientras cargamos los datos iniciales, mostramos un mensaje de carga
   if (loading) return <p>Cargando perfil…</p>;
 
   return (
     <div style={{ padding: "1rem" }}>
+      {/* Título de la sección */}
       <h2 className="section-title">Mi perfil</h2>
       <div className="card" style={{ padding: "1rem", maxWidth: "400px" }}>
         <form onSubmit={guardarPerfil}>
-          {/* Nombre */}
+          {/* Campo: Nombre */}
           <div className="form-group" style={{ marginBottom: "1rem" }}>
             <label>Nombre:</label>
             <input
@@ -89,7 +113,7 @@ export default function PaginaPerfilPaciente() {
             />
           </div>
 
-          {/* Email */}
+          {/* Campo: Email */}
           <div className="form-group" style={{ marginBottom: "1rem" }}>
             <label>Email:</label>
             <input
@@ -100,7 +124,7 @@ export default function PaginaPerfilPaciente() {
             />
           </div>
 
-          {/* Teléfono */}
+          {/* Campo: Teléfono */}
           <div className="form-group" style={{ marginBottom: "1rem" }}>
             <label>Teléfono:</label>
             <input
@@ -111,6 +135,7 @@ export default function PaginaPerfilPaciente() {
             />
           </div>
 
+          {/* Botón para guardar cambios */}
           <button type="submit" className="btn btn-primary">
             Guardar
           </button>

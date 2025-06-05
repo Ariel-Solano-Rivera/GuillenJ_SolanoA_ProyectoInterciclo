@@ -1,4 +1,4 @@
-// Punto único de acceso al SDK de Firebase
+// Punto único de acceso al Firebase
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";

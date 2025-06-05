@@ -5,40 +5,68 @@ import {
   useCitasAdmin,
   eliminarCita,
   actualizarCita,
-} from "../data/useCitas";
-import useMedicos from "../data/useMedicos";
-import useUsuarios from "../data/useUsuarios";
-import useHorarios from "../data/useHorarios";
+} from "../data/useCitas";      
+import useMedicos from "../data/useMedicos";   
+import useUsuarios from "../data/useUsuarios"; 
+import useHorarios from "../data/useHorarios"; 
 import { collection, query, where, getDocs } from "firebase/firestore";
-import { db } from "../api/firebase";
+import { db } from "../api/firebase";          
 
+/**
+ * PaginaCitasAdmin:
+ *  - Permite al administrador ver, filtrar, buscar, editar y eliminar citas.
+ *  - Usa hooks para cargar datos en tiempo real y manejar el estado de edición.
+ */
 export default function PaginaCitasAdmin() {
+  // 1) useCitasAdmin devuelve:
+  //    • citas: array de todas las citas (ordenadas internamente por slot)
+  //    • confirmar: función para cambiar estado a "confirmada"
   const { citas, confirmar } = useCitasAdmin();
+
+  // 2) Cargamos lista de médicos para mostrar nombre y especialidad
   const { medicos } = useMedicos();
+
+  // 3) Cargamos lista de usuarios para obtener datos del paciente (displayName, email)
   const usuarios = useUsuarios();
 
+  // ── Estados para filtros de listado ─────────────────────────────────────────────────
+  // Filtrar por estado: "todas", "pendiente" o "confirmada"
   const [estadoFilter, setEstadoFilter] = useState("todas");
+  // Buscar por término: coincidir nombre de paciente o nombre de médico
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Para edición inline
-  const [editingId, setEditingId] = useState(null);
-  const [editMedico, setEditMedico] = useState("");
-  const [editFecha, setEditFecha] = useState("");
-  const [editHora, setEditHora] = useState("");
-  const [editError, setEditError] = useState("");
+  // ── Estados para edición inline ────────────────────────────────────────────────────
+  const [editingId, setEditingId] = useState(null); // ID de la cita en modo edición
+  const [editMedico, setEditMedico] = useState(""); // seleccionado médico durante edición
+  const [editFecha, setEditFecha] = useState("");   // fecha elegida al editar (YYYY-MM-DD)
+  const [editHora, setEditHora] = useState("");     // hora elegida al editar (HH:MM)
+  const [editError, setEditError] = useState("");   // mensaje de error si valida fallida
 
-  // Al cambiar el médico en edición, recargamos sus horarios
+  // 4) Cuando cambiamos `editMedico`, recargamos los horarios de ese médico para la edición
   const { horarios: horariosEdit } = useHorarios(editMedico);
 
-  // Cargar “takenSlots” para el médico y la fecha en edición
+  // 5) Estado para las horas ya ocupadas (confirmadas) durante la edición
   const [takenSlotsEdit, setTakenSlotsEdit] = useState([]);
+
+  /**
+   * useEffect para recargar `takenSlotsEdit`:
+   *  - Cada vez que cambian editMedico, editFecha, citas o editingId:
+   *    • Consulta Firestore para obtener citas confirmadas del médico y fecha en edición.
+   *    • Extrae las horas ocupadas, excluyendo la hora de la propia cita que estamos editando.
+   */
   useEffect(() => {
+    // Si no hay médico o fecha, vaciamos el array
     if (!editMedico || !editFecha) {
       setTakenSlotsEdit([]);
       return;
     }
+
     const cargarTaken = async () => {
       try {
+        // Construimos la consulta: citas donde
+        //    medicoId == editMedico,
+        //    fechaISO == editFecha,
+        //    estado == "confirmada"
         const q = query(
           collection(db, "citas"),
           where("medicoId", "==", editMedico),
@@ -46,10 +74,11 @@ export default function PaginaCitasAdmin() {
           where("estado", "==", "confirmada")
         );
         const snap = await getDocs(q);
+        // Extraemos horas ocupadas:
         const ocupadas = snap.docs
           .map((d) => d.data().hora)
-          // Excluimos la hora de la propia cita que estamos editando:
           .filter((h) => {
+            // Excluimos la hora de la propia cita en edición
             const citadata = citas.find((c) => c.id === editingId);
             return citadata && h === citadata.hora ? false : true;
           });
@@ -59,18 +88,29 @@ export default function PaginaCitasAdmin() {
         setTakenSlotsEdit([]);
       }
     };
+
     cargarTaken();
   }, [editMedico, editFecha, citas, editingId]);
 
+  // ── Funciones auxiliares para mostrar datos legibles ────────────────────────────────
+  // Dado un ID de médico, devuelve su nombre o '—' si no existe
   const medicoPorId = (id) =>
     medicos.find((m) => m.id === id)?.nombre || "—";
 
+  // Dado un ID de paciente, busca en usuarios y devuelve "Nombre · Email"
+  // Si no encuentra, retorna el mismo id
   const pacienteInfo = (id) => {
     const u = usuarios.find((x) => x.id === id);
     return u ? `${u.displayName || "(sin nombre)"} · ${u.email}` : id;
   };
 
-  // Filtrado de citas por estado y término de búsqueda
+  /**
+   * filteredCitas:
+   *  - Filtra las citas según estadoFilter y searchTerm.
+   *  - Si estadoFilter != "todas", restringe a citas cuyo c.estado == estadoFilter.
+   *  - Si searchTerm no está vacío, compara (nombre paciente + email) y (nombre médico),
+   *    devolviendo true si alguno incluye el término (minusculizado).
+   */
   const filteredCitas = useMemo(() => {
     return citas.filter((c) => {
       if (estadoFilter !== "todas" && c.estado !== estadoFilter) return false;
@@ -84,7 +124,12 @@ export default function PaginaCitasAdmin() {
     });
   }, [citas, usuarios, medicos, estadoFilter, searchTerm]);
 
-  // Validar que la nueva fecha/hora no colisione con otra cita confirmada
+  /**
+   * validarEdicion:
+   *  - Asegura que editMedico, editFecha y editHora estén completos.
+   *  - Verifica que la hora seleccionada no esté en takenSlotsEdit.
+   *  - Si falla, asigna mensaje a editError y regresa false; en caso contrario, limpia editError y retorna true.
+   */
   const validarEdicion = () => {
     if (!editMedico || !editFecha || !editHora) {
       setEditError("Debe completar Médico, Fecha y Hora.");
@@ -98,11 +143,19 @@ export default function PaginaCitasAdmin() {
     return true;
   };
 
-  // Guardar los cambios de edición
+  /**
+   * handleGuardarEdicion:
+   *  - Invoca validarEdicion; si pasa, actualiza la cita en Firestore:
+   *      • Busca la especialidad actual del médico elegido
+   *      • Llama a actualizarCita con los nuevos campos
+   *  - Al finalizar, sale del modo edición y limpia los inputs de edición.
+   *  - Captura y muestra en editError cualquier excepción que ocurra.
+   */
   const handleGuardarEdicion = async () => {
     if (!validarEdicion()) return;
+
     try {
-      // Obtener la especialidad actual del médico seleccionado
+      // Obtener la especialidad correspondiente al médico editMedico
       const medObj = medicos.find((m) => m.id === editMedico);
       const nuevaEspecialidad = medObj ? medObj.especialidad : "";
 
@@ -113,7 +166,7 @@ export default function PaginaCitasAdmin() {
         hora: editHora,
       });
 
-      // Cerrar el modo edición
+      // Salir del modo edición, limpiando estados
       setEditingId(null);
       setEditMedico("");
       setEditFecha("");
@@ -125,12 +178,14 @@ export default function PaginaCitasAdmin() {
     }
   };
 
+  // ── Renderizado del componente ───────────────────────────────────────────────────────
   return (
     <div>
       <h2 className="section-title">Citas</h2>
 
-      {/* FILTROS */}
+      {/* ── Controles de filtrado ────────────────────────────────────────────────────── */}
       <div className="filter-container">
+        {/* Filtrar por estado */}
         <div className="filter-group">
           <label>Estado:</label>
           <select
@@ -143,6 +198,8 @@ export default function PaginaCitasAdmin() {
             <option value="confirmada">Confirmada</option>
           </select>
         </div>
+
+        {/* Buscar por paciente o médico */}
         <div className="filter-group" style={{ flex: 1 }}>
           <label>Buscar:</label>
           <input
@@ -155,11 +212,11 @@ export default function PaginaCitasAdmin() {
         </div>
       </div>
 
-      {/* LISTADO DE CITAS */}
+      {/* ── Listado de citas filtradas ────────────────────────────────────────────────── */}
       {filteredCitas.length > 0 ? (
         filteredCitas.map((c) => (
           <div key={c.id} className="item-card">
-            {/* Si estamos editando esta cita */}
+            {/* ── Modo edición para la cita con ID == editingId ───────────────────────── */}
             {editingId === c.id ? (
               <div
                 style={{
@@ -171,7 +228,7 @@ export default function PaginaCitasAdmin() {
               >
                 <h3>Editar cita de {pacienteInfo(c.pacienteUid)}</h3>
 
-                {/* 1) Selección de Médico */}
+                {/* 1) Selector de Médico (parte de editar) */}
                 <div style={{ marginBottom: "0.75rem" }}>
                   <label>
                     Médico:
@@ -179,6 +236,7 @@ export default function PaginaCitasAdmin() {
                       value={editMedico}
                       onChange={(e) => {
                         setEditMedico(e.target.value);
+                        // Al cambiar médico, reseteamos fecha y hora previas
                         setEditFecha("");
                         setEditHora("");
                       }}
@@ -193,7 +251,7 @@ export default function PaginaCitasAdmin() {
                   </label>
                 </div>
 
-                {/* 2) Selección de Fecha */}
+                {/* 2) Selector de Fecha (parte de editar) */}
                 <div style={{ marginBottom: "0.75rem" }}>
                   <label>
                     Fecha:
@@ -204,30 +262,30 @@ export default function PaginaCitasAdmin() {
                         setEditFecha(e.target.value);
                         setEditHora("");
                       }}
-                      // Listado de fechas según los próximos 30 días y días de trabajo del médico
+                      // Listado de fechas válidas según próximos 30 días y días de trabajo
                       list="fechasDisponiblesEdit"
                       disabled={!editMedico}
+                      // Calcular min y max en línea para no requerir código extra
                       min={(() => {
                         if (!editMedico) return undefined;
-                        // Construir array de próximas 30 fechas
                         const hoy = new Date();
                         const fechasArr = [];
-                        const y0 = hoy.getFullYear();
-                        const m0 = hoy.getMonth();
-                        const d0 = hoy.getDate();
+                        const y = hoy.getFullYear();
+                        const m = hoy.getMonth();
+                        const d = hoy.getDate();
                         const diasTrab = new Set();
                         horariosEdit.forEach((h) => {
                           if (Array.isArray(h.dias)) {
-                            h.dias.forEach((d) => diasTrab.add(d));
+                            h.dias.forEach((x) => diasTrab.add(x));
                           }
                         });
                         for (let i = 0; i < 30; i++) {
-                          const tmp = new Date(y0, m0, d0 + i);
+                          const tmp = new Date(y, m, d + i);
                           if (diasTrab.has(tmp.getDay())) {
-                            const y1 = tmp.getFullYear();
-                            const m1 = String(tmp.getMonth() + 1).padStart(2, "0");
-                            const d1 = String(tmp.getDate()).padStart(2, "0");
-                            fechasArr.push(`${y1}-${m1}-${d1}`);
+                            const yy = tmp.getFullYear();
+                            const mm = String(tmp.getMonth() + 1).padStart(2, "0");
+                            const dd = String(tmp.getDate()).padStart(2, "0");
+                            fechasArr.push(`${yy}-${mm}-${dd}`);
                           }
                         }
                         return fechasArr.length > 0 ? fechasArr[0] : undefined;
@@ -242,16 +300,16 @@ export default function PaginaCitasAdmin() {
                         const diasTrab2 = new Set();
                         horariosEdit.forEach((h) => {
                           if (Array.isArray(h.dias)) {
-                            h.dias.forEach((d) => diasTrab2.add(d));
+                            h.dias.forEach((x) => diasTrab2.add(x));
                           }
                         });
                         for (let i = 0; i < 30; i++) {
                           const tmp2 = new Date(y2, m2, d2 + i);
                           if (diasTrab2.has(tmp2.getDay())) {
-                            const y3 = tmp2.getFullYear();
-                            const m3 = String(tmp2.getMonth() + 1).padStart(2, "0");
-                            const d3 = String(tmp2.getDate()).padStart(2, "0");
-                            fechas2.push(`${y3}-${m3}-${d3}`);
+                            const yy2 = tmp2.getFullYear();
+                            const mm2 = String(tmp2.getMonth() + 1).padStart(2, "0");
+                            const dd2 = String(tmp2.getDate()).padStart(2, "0");
+                            fechas2.push(`${yy2}-${mm2}-${dd2}`);
                           }
                         }
                         return fechas2.length > 0 ? fechas2[fechas2.length - 1] : undefined;
@@ -262,22 +320,22 @@ export default function PaginaCitasAdmin() {
                         if (!editMedico) return null;
                         const hoy3 = new Date();
                         const arr3 = [];
-                        const yx0 = hoy3.getFullYear();
-                        const mx0 = hoy3.getMonth();
-                        const dx0 = hoy3.getDate();
+                        const yy3 = hoy3.getFullYear();
+                        const mm3 = hoy3.getMonth();
+                        const dd3 = hoy3.getDate();
                         const diasTrab3 = new Set();
                         horariosEdit.forEach((h) => {
                           if (Array.isArray(h.dias)) {
-                            h.dias.forEach((d) => diasTrab3.add(d));
+                            h.dias.forEach((x) => diasTrab3.add(x));
                           }
                         });
                         for (let i = 0; i < 30; i++) {
-                          const tmp3 = new Date(yx0, mx0, dx0 + i);
+                          const tmp3 = new Date(yy3, mm3, dd3 + i);
                           if (diasTrab3.has(tmp3.getDay())) {
-                            const y4 = tmp3.getFullYear();
-                            const m4 = String(tmp3.getMonth() + 1).padStart(2, "0");
-                            const d4 = String(tmp3.getDate()).padStart(2, "0");
-                            arr3.push(`${y4}-${m4}-${d4}`);
+                            const yy4 = tmp3.getFullYear();
+                            const mm4 = String(tmp3.getMonth() + 1).padStart(2, "0");
+                            const dd4 = String(tmp3.getDate()).padStart(2, "0");
+                            arr3.push(`${yy4}-${mm4}-${dd4}`);
                           }
                         }
                         return arr3.map((f) => <option key={f} value={f} />);
@@ -286,7 +344,7 @@ export default function PaginaCitasAdmin() {
                   </label>
                 </div>
 
-                {/* 3) Selección de Hora */}
+                {/* 3) Selector de Hora (parte de editar) */}
                 <div style={{ marginBottom: "0.75rem" }}>
                   <label>
                     Hora:
@@ -317,17 +375,19 @@ export default function PaginaCitasAdmin() {
                   </label>
                 </div>
 
+                {/* 4) Mostrar error de edición si existe */}
                 {editError && (
                   <div style={{ color: "red", marginBottom: "0.75rem" }}>
                     {editError}
                   </div>
                 )}
 
-                {/* 4) Botones Guardar / Cancelar */}
+                {/* 5) Botones para guardar o cancelar edición */}
                 <div style={{ display: "flex", gap: "0.5rem" }}>
                   <button onClick={handleGuardarEdicion}>Guardar cambios</button>
                   <button
                     onClick={() => {
+                      // Al cancelar, limpiamos todos los estados de edición
                       setEditingId(null);
                       setEditMedico("");
                       setEditFecha("");
@@ -340,7 +400,7 @@ export default function PaginaCitasAdmin() {
                 </div>
               </div>
             ) : (
-              /* Modo lectura normal para esta cita */
+              /* ── Modo lectura normal (sin editar) ──────────────────────────────────── */
               <>
                 <div className="item-details">
                   <p>
@@ -374,8 +434,10 @@ export default function PaginaCitasAdmin() {
                     </span>
                   </p>
                 </div>
+
+                {/* Botones de acción para cada cita */}
                 <div className="item-actions">
-                  {/* Editar */}
+                  {/* Botón Editar: activa modo edición */}
                   <button
                     className="btn btn-warning"
                     onClick={() => {
@@ -389,7 +451,8 @@ export default function PaginaCitasAdmin() {
                   >
                     Editar
                   </button>
-                  {/* Confirmar (solo si está pendiente) */}
+
+                  {/* Botón Confirmar: solo si la cita aún está pendiente */}
                   {c.estado === "pendiente" && (
                     <button
                       className="btn btn-success"
@@ -399,7 +462,8 @@ export default function PaginaCitasAdmin() {
                       Confirmar
                     </button>
                   )}
-                  {/* Eliminar */}
+
+                  {/* Botón Eliminar: borra la cita sin importar su estado */}
                   <button
                     className="btn btn-danger"
                     onClick={async () => {
@@ -418,6 +482,7 @@ export default function PaginaCitasAdmin() {
           </div>
         ))
       ) : (
+        /* Si no hay citas que coincidan con filtros, mostrar mensaje */
         <p style={{ color: "var(--color-gris-600)" }}>
           No hay citas que coincidan con los filtros.
         </p>

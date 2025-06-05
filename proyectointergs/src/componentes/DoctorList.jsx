@@ -1,6 +1,13 @@
 // src/componentes/DoctorList.jsx
+
 import React from "react";
 
+/**
+ * DoctorList:
+ *  - Recibe un arreglo `medicos` y un callback `onDelete`.
+ *  - Muestra en una tabla cada médico con sus datos y un botón para eliminar.
+ 
+ */
 export default function DoctorList({ medicos, onDelete }) {
   return (
     <div className="table-container">
@@ -16,13 +23,17 @@ export default function DoctorList({ medicos, onDelete }) {
         <tbody>
           {medicos.map((m) => (
             <tr key={m.id}>
+              {/* Columna Nombre: muestra m.nombre */}
               <td>{m.nombre}</td>
+              {/* Columna Especialidad: muestra m.especialidad */}
               <td>{m.especialidad}</td>
+              {/* Columna Teléfono: si m.telefono existe, lo muestra; si no, "—" */}
               <td>{m.telefono || "—"}</td>
+              {/* Columna Acción: botón para eliminar */}
               <td style={{ textAlign: "center" }}>
                 <button
                   className="btn btn-danger"
-                  onClick={() => onDelete(m.id)}
+                  onClick={() => onDelete(m.id)} // Invoca callback onDelete con el id del médico
                 >
                   Eliminar
                 </button>
@@ -31,6 +42,7 @@ export default function DoctorList({ medicos, onDelete }) {
           ))}
           {medicos.length === 0 && (
             <tr>
+              {/* Si no hay médicos en el arreglo, mostrar fila indicándolo */}
               <td colSpan="4" style={{ textAlign: "center", padding: "1rem" }}>
                 No hay médicos registrados.
               </td>

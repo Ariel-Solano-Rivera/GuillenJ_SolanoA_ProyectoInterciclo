@@ -5,30 +5,42 @@ import useMedicos from "../data/useMedicos";
 import useUsuarios from "../data/useUsuarios";
 import { useCitasAdmin } from "../data/useCitas";
 
+/**
+ * PaginaAdminInicio:
+ *  - Página principal del administrador que muestra estadísticas clave.
+ *  - Utiliza hooks para recuperar médicos, usuarios y citas en tiempo real.
+ */
 export default function PaginaAdminInicio() {
-  // Hook para obtener lista de médicos
+  // 1) Obtenemos la lista de todos los médicos en tiempo real
   const { medicos } = useMedicos();
 
-  // Hook para obtener lista de usuarios
+  // 2) Obtenemos la lista de todos los usuarios en tiempo real
   const usuarios = useUsuarios();
 
-  // Hook para obtener lista de todas las citas y la función confirmar (no la usamos aquí pero la necesitamos para cargar las citas)
+  // 3) Obtenemos la lista de todas las citas y (opc.) la función confirmar
+  //    Solo usamos `citas` aquí para calcular métricas
   const { citas } = useCitasAdmin();
 
-  // Calculamos totales de citas pendientes y confirmadas
+  /**
+   * 4) Calculamos, con useMemo, cuántas citas están pendientes y cuántas confirmadas.
+   *    useMemo solo se recalculará si cambia `citas`.
+   */
   const { totalPendientes, totalConfirmadas } = useMemo(() => {
     let pendientes = 0;
     let confirmadas = 0;
+
+    // Recorremos todas las citas y aumentamos los contadores según su estado
     citas.forEach((c) => {
       if (c.estado === "pendiente") pendientes++;
       if (c.estado === "confirmada") confirmadas++;
     });
+
     return { totalPendientes: pendientes, totalConfirmadas: confirmadas };
   }, [citas]);
 
   return (
     <div style={{ padding: "1rem" }}>
-      {/* ====== Bienvenida ====== */}
+      {/* ====== Bienvenida y descripción de uso ====== */}
       <div className="card" style={{ marginBottom: "1.5rem" }}>
         <h2 className="section-title">Panel de Administrador</h2>
         <p>
@@ -56,7 +68,7 @@ export default function PaginaAdminInicio() {
           marginBottom: "1.5rem",
         }}
       >
-        {/* 1) Total Médicos */}
+        {/* 1) Total de Médicos */}
         <div className="card" style={{ textAlign: "center", padding: "1rem" }}>
           <div style={{ fontSize: "2.5rem", fontWeight: "bold", color: "#1D4ED8" }}>
             {medicos.length}
@@ -66,7 +78,7 @@ export default function PaginaAdminInicio() {
           </div>
         </div>
 
-        {/* 2) Total Usuarios */}
+        {/* 2) Total de Usuarios */}
         <div className="card" style={{ textAlign: "center", padding: "1rem" }}>
           <div style={{ fontSize: "2.5rem", fontWeight: "bold", color: "#047857" }}>
             {usuarios.length}
@@ -97,7 +109,7 @@ export default function PaginaAdminInicio() {
         </div>
       </div>
 
-      {/* ====== Tips Rápidos ====== */}
+      {/* ====== Tips Rápidos para Navegar ====== */}
       <div className="card" style={{ marginBottom: "1.5rem" }}>
         <h3 className="section-title">Tips Rápidos</h3>
         <ul style={{ paddingLeft: "1.25rem", color: "#444", marginTop: "0.5rem" }}>

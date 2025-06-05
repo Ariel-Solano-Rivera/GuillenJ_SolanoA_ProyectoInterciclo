@@ -10,62 +10,75 @@ import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "../api/firebase";
 
 /**
- * Formulario para que el paciente solicite una cita.
- * - Trae especialidades en tiempo real.
- * - Trae médicos filtrados por el nombre de especialidad.
- * - Trae horarios filtrados por el médico seleccionado.
- * - Excluye horas ya ocupadas (confirmadas) para ese médico en esa fecha.
- * - Si no hay horas para el día elegido, muestra un mensaje.
+ * CitaForm:
+ *  - Permite al paciente solicitar una nueva cita.
+ *  - Carga especialidades, médicos y horarios según las selecciones.
+ *  - Bloquea cualquier hora que ya exista en Firestore (sin importar estado)
+ *    para ese médico y esa fecha, de modo que no pueda repetirse.
  */
 export default function CitaForm({ onCitaGuardada }) {
   const { usuario } = useAuth();
 
-  // Estados del formulario
-  const [especialidadSel, setEspecialidadSel] = useState("");
-  const [medicoSel, setMedicoSel] = useState("");
-  const [fechaSel, setFechaSel] = useState("");
-  const [horaSel, setHoraSel] = useState("");
-  const [error, setError] = useState("");
+  // ── Estados locales para el formulario ──
+  const [especialidadSel, setEspecialidadSel] = useState(""); // especialidad elegida
+  const [medicoSel, setMedicoSel] = useState("");             // ID del médico elegido
+  const [fechaSel, setFechaSel] = useState("");               // fecha en "YYYY-MM-DD"
+  const [horaSel, setHoraSel] = useState("");                 // hora en "HH:MM"
+  const [error, setError] = useState("");                     // mensaje de error
 
-  // Hooks a Firestore
-  const especialidades = useEspecialidades(); // [{ id, name }]
-  const { medicos } = useMedicos(especialidadSel); // lista de médicos filtrados por nombre de especialidad
-  const { horarios } = useHorarios(medicoSel); // horarios del médico seleccionado
+  // ── Datos en tiempo real de Firestore ──
+  const especialidades = useEspecialidades();
+  const { medicos } = useMedicos(especialidadSel);
+  const { horarios } = useHorarios(medicoSel);
 
-  // Estado para las horas ya confirmadas (ocupadas) en base a medicoSel + fechaSel
+  // ── Estado para horas ya registradas (cualquier estado) ──
   const [takenSlots, setTakenSlots] = useState([]);
 
-  // Cuando cambia medicoSel o fechaSel, recargo las horas confirmadas de Firestore
+  /**
+   * Cada vez que cambian medicoSel o fechaSel:
+   *  1) Consultamos todas las citas para ese médico y esa fecha en Firestore.
+   *  2) Sin filtrar por estado, recogemos todas las horas que ya existen.
+   *  3) Así nos aseguramos de bloquear tanto pendientes como confirmadas.
+   */
   useEffect(() => {
     if (!medicoSel || !fechaSel) {
       setTakenSlots([]);
       return;
     }
+
     const cargarTakenSlots = async () => {
       try {
+        // 1) Consulta todas las citas que coincidan en médico + fecha
         const q = query(
           collection(db, "citas"),
           where("medicoId", "==", medicoSel),
-          where("fechaISO", "==", fechaSel),
-          where("estado", "==", "confirmada")
+          where("fechaISO", "==", fechaSel)
         );
-        const snap = await getDocs(q);
-        const horasOcupadas = snap.docs.map((d) => d.data().hora);
-        setTakenSlots(horasOcupadas);
+        const snapshot = await getDocs(q);
+
+        // 2) Extraemos todas las horas sin importar el estado
+        const horasOcupadas = snapshot.docs.map((docSnap) => docSnap.data().hora);
+
+        // 3) Eliminamos duplicados
+        const horasUnicas = Array.from(new Set(horasOcupadas));
+        setTakenSlots(horasUnicas);
       } catch (err) {
         console.error("Error cargando horas ocupadas:", err);
         setTakenSlots([]);
       }
     };
+
     cargarTakenSlots();
   }, [medicoSel, fechaSel]);
 
-  // 1) Calcular “días disponibles” en los próximos 30 días según el array de horarios
-  //    (usamos new Date(año, mesIndex, día) para evitar desplazamientos de zona horaria)
+  /**
+   * validDates:
+   *  - Calcula las próximas 30 fechas en las que el médico atiende.
+   *  - Mapea el campo `horarios` (días de la semana + slots) para generar "YYYY-MM-DD".
+   */
   const validDates = useMemo(() => {
     if (!horarios || horarios.length === 0) return [];
 
-    // Recojo en un Set todos los índices de día de la semana en que el médico trabaja
     const diasTrabajo = new Set();
     horarios.forEach((h) => {
       if (Array.isArray(h.dias)) {
@@ -77,45 +90,46 @@ export default function CitaForm({ onCitaGuardada }) {
     const arrFechas = [];
     const hoy = new Date();
     for (let i = 0; i < 30; i++) {
-      // Creo un objeto Date ajustado a las componentes locales
       const fechaActual = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + i);
-      const indice = fechaActual.getDay(); // 0=domingo,1=lunes,...6=sábado
-      if (diasTrabajo.has(indice)) {
-        // Formato YYYY-MM-DD para el input type="date"
-        const yyyy = fechaActual.getFullYear();
-        const mm = String(fechaActual.getMonth() + 1).padStart(2, "0"); // mesIndex +1
-        const dd = String(fechaActual.getDate()).padStart(2, "0");
-        arrFechas.push(`${yyyy}-${mm}-${dd}`);
+      const idx = fechaActual.getDay(); // 0 = domingo, …, 6 = sábado
+      if (diasTrabajo.has(idx)) {
+        const y = fechaActual.getFullYear();
+        const m = String(fechaActual.getMonth() + 1).padStart(2, "0");
+        const d = String(fechaActual.getDate()).padStart(2, "0");
+        arrFechas.push(`${y}-${m}-${d}`);
       }
     }
     return arrFechas;
   }, [horarios]);
 
-  // 2) Calcular “horas disponibles” para la fecha elegida, excluyendo las tomadas
+  /**
+   * horasDisponibles:
+   *  - Para la fechaSel, buscamos el objeto `horario` que cubra ese día (0–6).
+   *  - Filtramos sus `slots` excluyendo los que estén en takenSlots.
+   */
   const horasDisponibles = useMemo(() => {
     if (!horarios || horarios.length === 0 || !fechaSel) return [];
 
-    // Descompongo la fechaSel "YYYY-MM-DD" para crear un Date local
-    const [yyyy, mm, dd] = fechaSel.split("-").map((str) => Number(str));
-    const fechaObj = new Date(yyyy, mm - 1, dd);
-    const diaIdx = fechaObj.getDay(); // índice del día de la semana
+    const [y, m, d] = fechaSel.split("-").map(Number);
+    const fechaObj = new Date(y, m - 1, d);
+    const idx = fechaObj.getDay();
 
-    // Busco el objeto de horario que incluya ese día (h.dias contiene diaIdx)
-    const horarioParaDia = horarios.find(
-      (h) => Array.isArray(h.dias) && h.dias.includes(diaIdx)
-    );
-    if (!horarioParaDia || !Array.isArray(horarioParaDia.slots)) return [];
+    const objHorario = horarios.find((h) => Array.isArray(h.dias) && h.dias.includes(idx));
+    if (!objHorario || !Array.isArray(objHorario.slots)) return [];
 
-    // De los slots de ese día, excluyo los que estén en takenSlots
-    return horarioParaDia.slots.filter((h) => !takenSlots.includes(h));
+    return objHorario.slots.filter((h) => !takenSlots.includes(h));
   }, [horarios, fechaSel, takenSlots]);
 
-  // 3) Manejar envío del formulario
+  /**
+   * handleGuardar:
+   *  - Valida que existan especialidad, médico, fecha y hora.
+   *  - Verifica que horaSel no esté en takenSlots (cualquier cita existente).
+   *  - Si todo OK, crea la cita con estado "pendiente".
+   */
   const handleGuardar = async (e) => {
     e.preventDefault();
     setError("");
 
-    // Validaciones
     if (!especialidadSel) {
       setError("Debe seleccionar una especialidad.");
       return;
@@ -137,9 +151,11 @@ export default function CitaForm({ onCitaGuardada }) {
       return;
     }
 
-    // Verifico de nuevo que la hora no esté en takenSlots
+    // Bloquear si ya existe cualquier cita (sin importar su estado) en esa hora
     if (takenSlots.includes(horaSel)) {
-      setError("Lo siento, esa hora ya está ocupada. Elige otro horario.");
+      setError(
+        "Lo siento, esa hora ya está ocupada. Elige otro horario o elimina la cita existente."
+      );
       return;
     }
 
@@ -152,7 +168,7 @@ export default function CitaForm({ onCitaGuardada }) {
         hora: horaSel,
       });
       if (onCitaGuardada) onCitaGuardada();
-      // Limpio el formulario
+      // Limpiar formulario
       setEspecialidadSel("");
       setMedicoSel("");
       setFechaSel("");
@@ -160,14 +176,18 @@ export default function CitaForm({ onCitaGuardada }) {
       alert("Cita guardada correctamente.");
     } catch (err) {
       console.error("Error guardando cita:", err);
-      setError(err.message || "Ocurrió un error al guardar la cita. Intenta de nuevo.");
+      setError(
+        err.message || "Ocurrió un error al guardar la cita. Intenta de nuevo."
+      );
     }
   };
 
+  // ── Renderizado del formulario ─────────────────────────────────────
   return (
     <form onSubmit={handleGuardar} style={{ maxWidth: "400px", margin: "auto" }}>
       <h3>Solicitar cita</h3>
 
+      {/* Mensaje de error si existe */}
       {error && <div style={{ color: "red", marginBottom: "10px" }}>{error}</div>}
 
       {/* 1) Selección de Especialidad */}
@@ -227,7 +247,6 @@ export default function CitaForm({ onCitaGuardada }) {
               setFechaSel(e.target.value);
               setHoraSel("");
             }}
-            // Usamos validDates para limitar el rango y el datalist
             min={validDates.length > 0 ? validDates[0] : undefined}
             max={validDates.length > 0 ? validDates[validDates.length - 1] : undefined}
             disabled={!medicoSel}
@@ -265,7 +284,7 @@ export default function CitaForm({ onCitaGuardada }) {
         )}
       </div>
 
-      {/* 5) Botones Guardar / Cancelar */}
+      {/* 5) Botones: Guardar y Cancelar */}
       <div style={{ display: "flex", justifyContent: "space-between" }}>
         <button type="submit">Guardar Cita</button>
         <button
